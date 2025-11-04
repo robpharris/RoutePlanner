@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Route Optimizer - Mobile Ready</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 10px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+        
+        .header p {
+            opacity: 0.8;
+            font-size: 14px;
+        }
+        
+        .content {
+            padding: 20px;
+        }
+        
+        .upload-area {
+            border: 2px dashed #bdc3c7;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .upload-area:hover {
+            border-color: #3498db;
+            background: #f8f9fa;
+        }
+        
+        .upload-area.dragover {
+            border-color: #2ecc71;
+            background: #d5f4e6;
+        }
+        
+        input[type="file"] {
+            display: none;
+        }
+        
+        .btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            margin: 10px 0;
+            transition: background 0.3s;
+        }
+        
+        .btn:hover {
+            background: #2980b9;
+        }
+        
+        .btn:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+        
+        .btn.success {
+            background: #27ae60;
+        }
+        
+        .results {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            padding: 10px;
+            background: white;
+            border-radius: 6px;
+            border-left: 4px solid #3498db;
+        }
+        
+        .metric.improvement {
+            border-left-color: #27ae60;
+        }
+        
+        .metric.savings {
+            border-left-color: #f39c12;
+        }
+        
+        .route-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+        
+        .route-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            margin: 2px 0;
+            background: white;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .route-item .order {
+            background: #3498db;
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 10px;
+            font-size: 12px;
+        }
+        
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 6px;
+            text-align: center;
+        }
+        
+        .status.error {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .status.success {
+            background: #27ae60;
+            color: white;
+        }
+        
+        .status.info {
+            background: #3498db;
+            color: white;
+        }
+        
+        @media (max-width: 600px) {
+            .content {
+                padding: 15px;
+            }
+            
+            .header h1 {
+                font-size: 20px;
+            }
+            
+            .upload-area {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚛 Route Optimizer</h1>
+            <p>Upload your delivery addresses and get an optimized route instantly</p>
+        </div>
+        
+        <div class="content">
+            <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+                <div id="uploadText">
+                    📁 Click to upload CSV file<br>
+                    <small>or drag and drop here</small>
+                </div>
+            </div>
+            
+            <input type="file" id="fileInput" accept=".csv" onchange="handleFile(event)">
+            
+            <button class="btn" id="optimizeBtn" onclick="optimizeRoute()" disabled>
+                🔄 Optimize Route
+            </button>
+            
+            <div id="status"></div>
+            
+            <div id="results" class="results">
+                <h3>📊 Optimization Results</h3>
+                <div id="metrics"></div>
+                <div id="routeList" class="route-list"></div>
+                <button class="btn success" onclick="downloadOptimizedRoute()">
+                    📄 Download Optimized Route
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let addresses = [];
+        let optimizedRoute = [];
+        
+        // Drag and drop functionality
+        const uploadArea = document.querySelector('.upload-area');
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                processFile(files[0]);
+            }
+        });
+        
+        function handleFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                processFile(file);
+            }
+        }
+        
+        function processFile(file) {
+            if (!file.name.toLowerCase().endsWith('.csv')) {
+                showStatus('Please upload a CSV file', 'error');
+                return;
+            }
+            
+            showStatus('Reading file...', 'info');
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    addresses = parseCSV(e.target.result);
+                    document.getElementById('uploadText').innerHTML = 
+                        `✅ ${addresses.length} addresses loaded<br><small>${file.name}</small>`;
+                    document.getElementById('optimizeBtn').disabled = false;
+                    showStatus(`Successfully loaded ${addresses.length} addresses`, 'success');
+                } catch (error) {
+                    showStatus('Error reading file: ' + error.message, 'error');
+                }
+            };
+            reader.readAsText(file);
+        }
+        
+        function parseCSV(content) {
+            const lines = content.split('\\n').filter(line => line.trim());
+            const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+            
+            return lines.slice(1).map((line, index) => {
+                const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+                const address = { id: (index + 1).toString() };
+                
+                headers.forEach((header, i) => {
+                    address[header] = values[i] || '';
+                });
+                
+                // Create address string from available fields
+                const addressParts = [];
+                if (address['St Num']) addressParts.push(address['St Num']);
+                if (address['St Name']) addressParts.push(address['St Name']);
+                if (address['APT#']) addressParts.push('Apt ' + address['APT#']);
+                if (address['Zip']) addressParts.push(address['Zip']);
+                
+                address.fullAddress = addressParts.join(' ') || address.Product || address.address || 'Unknown Address';
+                
+                // Mock geocoding (in real app, you'd use Google Maps API)
+                const coords = mockGeocode(address.fullAddress);
+                address.latitude = coords.latitude;
+                address.longitude = coords.longitude;
+                
+                return address;
+            });
+        }
+        
+        function mockGeocode(address) {
+            // Simple hash-based coordinate generation for demo
+            let hash = 0;
+            for (let i = 0; i < address.length; i++) {
+                hash = ((hash << 5) - hash) + address.charCodeAt(i);
+                hash = hash & hash; // Convert to 32bit integer
+            }
+            
+            return {
+                latitude: 40.7128 + (Math.abs(hash) % 1000) / 10000,
+                longitude: -74.0060 + (Math.abs(hash) % 1000) / 10000
+            };
+        }
+        
+        function calculateDistance(lat1, lng1, lat2, lng2) {
+            const R = 6371; // Earth's radius in km
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLng = (lng2 - lng1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLng/2) * Math.sin(dLng/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+        
+        function optimizeRoute() {
+            if (addresses.length === 0) {
+                showStatus('No addresses to optimize', 'error');
+                return;
+            }
+            
+            showStatus('Optimizing route...', 'info');
+            document.getElementById('optimizeBtn').disabled = true;
+            
+            setTimeout(() => {
+                const startTime = Date.now();
+                
+                // Calculate original distance
+                const originalDistance = calculateTotalDistance(addresses);
+                
+                // Optimize using nearest neighbor algorithm
+                optimizedRoute = nearestNeighborTSP([...addresses]);
+                
+                // Calculate optimized distance
+                const optimizedDistance = calculateTotalDistance(optimizedRoute);
+                const improvement = ((originalDistance - optimizedDistance) / originalDistance * 100);
+                const timeSaved = Math.round(improvement * 0.5); // Rough estimate
+                const duration = Date.now() - startTime;
+                
+                // Show results
+                displayResults({
+                    originalDistance,
+                    optimizedDistance,
+                    improvement,
+                    timeSaved,
+                    duration,
+                    addressCount: addresses.length
+                });
+                
+                document.getElementById('optimizeBtn').disabled = false;
+                showStatus(`Route optimized in ${duration}ms!`, 'success');
+            }, 100);
+        }
+        
+        function nearestNeighborTSP(addresses) {
+            if (addresses.length <= 1) return addresses;
+            
+            const route = [];
+            const unvisited = [...addresses];
+            
+            // Start with first address
+            let current = unvisited.shift();
+            route.push(current);
+            
+            while (unvisited.length > 0) {
+                let nearest = unvisited[0];
+                let shortestDistance = calculateDistance(
+                    current.latitude, current.longitude,
+                    nearest.latitude, nearest.longitude
+                );
+                
+                for (let i = 1; i < unvisited.length; i++) {
+                    const distance = calculateDistance(
+                        current.latitude, current.longitude,
+                        unvisited[i].latitude, unvisited[i].longitude
+                    );
+                    
+                    if (distance < shortestDistance) {
+                        shortestDistance = distance;
+                        nearest = unvisited[i];
+                    }
+                }
+                
+                route.push(nearest);
+                unvisited.splice(unvisited.indexOf(nearest), 1);
+                current = nearest;
+            }
+            
+            return route;
+        }
+        
+        function calculateTotalDistance(route) {
+            let total = 0;
+            for (let i = 0; i < route.length - 1; i++) {
+                total += calculateDistance(
+                    route[i].latitude, route[i].longitude,
+                    route[i + 1].latitude, route[i + 1].longitude
+                );
+            }
+            return total;
+        }
+        
+        function displayResults(results) {
+            document.getElementById('results').style.display = 'block';
+            
+            const metricsHTML = `
+                <div class="metric">
+                    <strong>Addresses Processed:</strong>
+                    <span>${results.addressCount}</span>
+                </div>
+                <div class="metric">
+                    <strong>Optimization Time:</strong>
+                    <span>${results.duration}ms</span>
+                </div>
+                <div class="metric">
+                    <strong>Original Distance:</strong>
+                    <span>${results.originalDistance.toFixed(2)} km</span>
+                </div>
+                <div class="metric">
+                    <strong>Optimized Distance:</strong>
+                    <span>${results.optimizedDistance.toFixed(2)} km</span>
+                </div>
+                <div class="metric improvement">
+                    <strong>Distance Improvement:</strong>
+                    <span>${results.improvement.toFixed(1)}%</span>
+                </div>
+                <div class="metric savings">
+                    <strong>Distance Saved:</strong>
+                    <span>${(results.originalDistance - results.optimizedDistance).toFixed(2)} km</span>
+                </div>
+            `;
+            
+            document.getElementById('metrics').innerHTML = metricsHTML;
+            
+            const routeHTML = optimizedRoute.map((address, index) => `
+                <div class="route-item">
+                    <div class="order">${index + 1}</div>
+                    <div>${address.fullAddress}</div>
+                </div>
+            `).join('');
+            
+            document.getElementById('routeList').innerHTML = '<h4>📍 Optimized Route Order:</h4>' + routeHTML;
+        }
+        
+        function downloadOptimizedRoute() {
+            if (optimizedRoute.length === 0) {
+                showStatus('No optimized route to download', 'error');
+                return;
+            }
+            
+            const headers = Object.keys(optimizedRoute[0]).filter(k => !['latitude', 'longitude', 'fullAddress'].includes(k));
+            const csvContent = [
+                headers.join(','),
+                ...optimizedRoute.map((addr, index) => 
+                    headers.map(h => h === 'id' ? index + 1 : addr[h]).join(',')
+                )
+            ].join('\\n');
+            
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'optimized_route_' + new Date().toISOString().split('T')[0] + '.csv';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            showStatus('Optimized route downloaded!', 'success');
+        }
+        
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = 'status ' + type;
+            statusDiv.textContent = message;
+            statusDiv.style.display = 'block';
+            
+            if (type === 'success' || type === 'info') {
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 3000);
+            }
+        }
+    </script>
+</body>
+</html>

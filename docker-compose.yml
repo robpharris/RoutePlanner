@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  frontend:
+    build: .
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DB_TYPE=${DB_TYPE:-sqlite}
+      - DB_HOST=${DB_HOST:-database}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-routeplanner}
+      - DB_USER=${DB_USER:-routeplanner}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/data:/app/data
+      - ./backups:/app/backups
+    depends_on:
+      - database
+    restart: unless-stopped
+
+  database:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=${DB_NAME:-routeplanner}
+      - POSTGRES_USER=${DB_USER:-routeplanner}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backup
+      - ./backend/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  # Redis for caching (optional)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  # Backup service
+  backup:
+    image: postgres:15-alpine
+    depends_on:
+      - database
+    volumes:
+      - ./backups:/backup
+    environment:
+      - PGPASSWORD=${DB_PASSWORD}
+    command: >
+      sh -c "
+        while true; do
+          sleep 24h;
+          pg_dump -h database -U ${DB_USER:-routeplanner} ${DB_NAME:-routeplanner} > /backup/backup_$$(date +%Y%m%d_%H%M%S).sql;
+          find /backup -name 'backup_*.sql' -mtime +30 -delete;
+        done
+      "
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
