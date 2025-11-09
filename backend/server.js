@@ -3,7 +3,7 @@ const cors = require('cors');
 const multer = require('multer');
 
 const app = express();
-const port = 3002;
+const port = 3003;
 
 // Middleware
 app.use(cors());
